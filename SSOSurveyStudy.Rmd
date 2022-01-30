@@ -1,0 +1,324 @@
+---
+title: "SSOSurveyStudy"
+author: "Ahmad R Pratama"
+date: "7/30/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Preparation
+## Packages
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(summarytools)
+library(ggfortify)
+library(lm.beta)
+library(sjPlot)
+library(gridExtra)
+library(dplyr)
+library(hrbrthemes)
+library(ggalt)
+library(ggtext)
+library(ggpubr)
+```
+## Attach dataset
+```{r, warning=FALSE, message=FALSE}
+data <- read_csv("ssosurvey283.csv")
+summary(data)
+```
+## Summary Statistics
+```{r}
+data
+freq(data, report.nas = F)
+```
+### Dependent Variables
+```{r}
+dv <- data[, c('knowledge','k1','k2','k3','k4','k5','attitude','a1','a2','a3','a4','a5','behavior','b1','b2','b3','b4','b5','score')]
+msd.dv <- dv %>% summarise_each(funs(mean, sd, min, max))
+round(msd.dv,digits=2)
+```
+
+
+### Independent Variables
+```{r}
+iv <- data[, c('familiarity','f1','f2','f3','privacy','pr1','pr2','pr3','pr4','pr5','extraversion','agreeableness','conscientiousness','emotionalstability','openness')]
+msd.iv <- iv %>% summarise_each(funs(mean, sd, min, max))
+round(msd.iv,digits=2)
+```
+
+```{r}
+mean(data$age)
+sd(data$age)
+```
+
+
+
+## Data Visualization
+### Scatterplot Age - Score
+```{r}
+g1 <- ggplot(data, aes(x=age, y=score, shape=gender, color=gender)) +
+  geom_point() +
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+g1 + facet_grid(rows = vars(roles))
+
+g2 <- ggplot(data, aes(x=age, y=score, shape=roles, color=roles)) +
+  geom_point() +
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+g2 + facet_grid(rows = vars(gender))
+
+g3 <- ggplot(data, aes(x=age, y=score, shape=gender, color=roles)) +
+  geom_point() +
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+g3 + facet_grid(vars(gender), vars(roles))+
+   labs(title = "SSO Security Awareness by Age", x="Age (years old)", y="SSO Security Awareness Score")
+
+g4 <- g3 + facet_grid(vars(gender), vars(roles))+
+   labs(title = "SSO Security Awareness by Age", x="Age (years old)", y="SSO Security Awareness Score")
+   
+#g3 + facet_grid(vars(roles), vars(gender))
+
+ggsave("fig2.pdf", plot= g4, dpi="print")
+```
+### Score by Gender
+```{r}
+scores <- data[,c('gender','score','knowledge','attitude','behavior')]
+sg <- scores %>% 
+    group_by(gender) %>%
+      summarize_each(funs(mean))
+sg
+```
+### Score by Roles
+```{r}
+scores <- data[,c('roles','score','knowledge','attitude','behavior')]
+sg <- scores %>% 
+    group_by(roles) %>%
+      summarize_each(funs(mean))
+sg
+```
+### Dumbbell Plots by Gender and Roles
+```{r}
+tibble(
+  Male = c(67.91, 63.04, 73.21, 69.59),
+  Female = c(65.81, 62.30, 73.63, 69.02),
+  Category = factor(c("Knowledge", "Attitude", "Behavior", "Total Score"), levels = c("Knowledge", "Attitude", "Behavior", "Total Score"))
+) -> xdf_gender
+
+xdf_gender2 <- gather(xdf_gender, group, value, !Category)
+xdf_gender2
+
+db_plot_gender <- ggplot(xdf_gender, aes(y = Category)) + 
+  geom_dumbbell(aes(x = Female, xend = Male), size=3, color="darkgrey", size_x=5, size_xend=5) +
+  geom_point(data = xdf_gender2, aes(x = value, color = group), size = 5) +
+  theme_classic() +
+  scale_color_manual(name = "Gender", values = c("red", "blue") ) +
+  labs(x="Score", 
+       y=element_blank()) +
+  theme(legend.position = "top") +
+  scale_x_continuous(#breaks=seq(5,13,1), 
+    limits = c(60,80))
+
+#dataset for academic role
+
+tibble(
+  Student = c(65.0, 61.17, 72.77, 68.15),
+  Faculty = c(71.91, 70.15, 75.15, 73.18),
+  Staff = c(70.48, 63.56, 74.71, 71.21),
+  Category = factor(c("Knowledge", "Attitude", "Behavior", "Total Score"), levels = c("Knowledge", "Attitude", "Behavior", "Total Score"))
+) -> xdf_role
+
+xdf_role2 <- gather(xdf_role, group, value, !Category)
+
+db_plot_role <- ggplot(xdf_role, aes(y = Category)) +
+  geom_dumbbell(aes(x = Student, xend = Faculty), size=3, color="darkgrey", size_x=5, size_xend=5) +
+  geom_point(data = xdf_role2, aes(x = value, color = group), size = 5) +
+  theme_classic() +
+  scale_color_manual(name = "Academic Role", values = c("#064635", "#519259", "#F0BB62") ) +
+  labs(x="Score", 
+       y=element_blank()) +
+  theme(legend.position = "top") +
+  scale_x_continuous(
+    limits = c(60,80)) +
+  rremove("y.text")
+
+#combine two plots
+
+fig3 <- ggarrange(db_plot_gender, db_plot_role) #combine plots
+fig3 <- annotate_figure(fig3,
+                top = text_grob("SSO Account Security Awareness by Gender and Academic Role", face = "bold", size = 14)) #add text in the middle
+fig3
+
+ggsave("fig3.pdf", plot= fig3, dpi="print")
+```
+
+## OLS Regression
+### Model 1: Privacy
+```{r}
+model1 <- lm(score ~ gender + age + roles + familiarity + privacy, data = data)
+summary(model1)
+```
+### Model 2: Privacy + Big5
+```{r}
+model2 <- lm(score ~ gender + age + roles + familiarity + privacy + extraversion + agreeableness + conscientiousness + emotionalstability + openness, data = data)
+summary(model2)
+```
+### Model 3: Privacy x Big5
+```{r}
+model3 <- lm(score ~ gender + age + roles + familiarity + privacy + extraversion + agreeableness*privacy + conscientiousness*privacy + emotionalstability + openness, data = data)
+summary(model3)
+```
+## Diagnostics
+### Residuals vs Fitted
+```{r}
+plot(model1, 1)
+plot(model2, 1)
+plot(model3, 1)
+```
+### Normal Q-Q
+```{r}
+plot(model1, 2)
+plot(model2, 2)
+plot(model3, 2)
+```
+### Scale-Location
+```{r}
+plot(model1, 3)
+plot(model2, 3)
+plot(model3, 3)
+```
+### Cook's distance
+```{r}
+plot(model1, 4)
+plot(model2, 4)
+plot(model3, 4)
+```
+
+### Residuals vs Leverage
+```{r}
+plot(model1, 5)
+plot(model2, 5)
+plot(model3, 5)
+```
+### Other Approaches
+```{r}
+library("car")
+qqPlot(model1,labels=row.names(id), id.method="identify", simulate=TRUE, main="Q-Q Plot")
+qqPlot(model2,labels=row.names(id), id.method="identify", simulate=TRUE, main="Q-Q Plot")
+qqPlot(model3,labels=row.names(id), id.method="identify", simulate=TRUE, main="Q-Q Plot")
+outlierTest(model1)
+outlierTest(model2)
+outlierTest(model3)
+```
+```{r}
+influencePlot(model1, main="Influence Plot", sub="Circle size is proportional to Cook’s distance")
+influencePlot(model2, main="Influence Plot", sub="Circle size is proportional to Cook’s distance")
+influencePlot(model3, main="Influence Plot", sub="Circle size is proportional to Cook’s distance")
+```
+```{r}
+qqPlot(model1,labels=row.names(id), id.method="identify", simulate=TRUE, main="Q-Q Plot")
+
+highleverage <- function(fit) {
+ p <- length(coefficients(fit))
+ n <- length(fitted(fit))
+ ratio <-p/n
+ plot(hatvalues(fit), main="Index Plot of Ratio")
+ abline(h=c(2,3)*ratio, col="red", lty=2)
+ text(hatvalues(fit), labels=rownames(data), font = 2)
+}
+highleverage(model1)
+
+influencePlot(model1, main="Influence Plot", sub="Circle size is proportional to Cook’s distance")
+```
+```{r}
+qqPlot(model2,labels=row.names(id), id.method="identify", simulate=TRUE, main="Q-Q Plot")
+
+highleverage <- function(fit) {
+ p <- length(coefficients(fit))
+ n <- length(fitted(fit))
+ ratio <-p/n
+ plot(hatvalues(fit), main="Index Plot of Ratio")
+ abline(h=c(2,3)*ratio, col="red", lty=2)
+ text(hatvalues(fit), labels=rownames(data), font = 2)
+}
+highleverage(model2)
+
+influencePlot(model2, main="Influence Plot", sub="Circle size is proportional to Cook’s distance")
+```
+
+
+```{r}
+qqPlot(model3,labels=row.names(id), id.method="identify", simulate=TRUE, main="Q-Q Plot")
+
+highleverage <- function(fit) {
+ p <- length(coefficients(fit))
+ n <- length(fitted(fit))
+ ratio <-p/n
+ plot(hatvalues(fit), main="Index Plot of Ratio")
+ abline(h=c(2,3)*ratio, col="red", lty=2)
+ text(hatvalues(fit), labels=rownames(data), font = 2)
+}
+highleverage(model3)
+
+influencePlot(model3, main="Influence Plot", sub="Circle size is proportional to Cook’s distance")
+```
+## Without Outliers, High-Leverage, & Influential Cases
+```{r}
+data2 <- data[-c(101, 252, 169),]
+summary(data2)
+```
+### Model 01: Demographics Only
+```{r}
+model0b <- lm(score ~ gender + age + roles, data = data2)
+summary(model0b)
+```
+### Model 02: Familiarity
+```{r}
+model0c <- lm(score ~ gender + age + roles + familiarity, data = data2)
+summary(model0c)
+```
+### Model 1b: Privacy
+```{r}
+model1b <- lm(score ~ gender + age + roles + familiarity + privacy, data = data2)
+summary(model1b)
+lm.beta(model1b)
+```
+
+### Model 2b: Privacy + Big5
+```{r}
+model2b <- lm(score ~ gender + age + roles + familiarity + privacy + extraversion + agreeableness + conscientiousness + emotionalstability + openness, data = data2)
+summary(model2b)
+lm.beta(model2b)
+```
+### Model 3b: Privacy x Big5
+```{r}
+model3b <- lm(score ~ gender + age + roles + familiarity + privacy + extraversion + agreeableness*privacy + conscientiousness*privacy + emotionalstability + openness, data = data2)
+summary(model3b)
+lm.beta(model3b)
+```
+## Model Comparison
+### Model 1b vs Model 2b
+```{r}
+anova(model1b, model2b)
+anova(model1b, model2b, test="Chisq")
+```
+### Model 2b vs Model 3b
+```{r}
+anova(model2b, model3b)
+anova(model2b, model3b, test="Chisq")
+```
+## Regression Visualization
+### Marginal Effects Plot
+```{r}
+plot1 <- plot_model(model3b, type = "pred", terms = c("privacy", "agreeableness[1,3,5,7]"), title = "", axis.title = c("Privacy Concerns", "Predicted Security Awareness Score"), legend.title = "Agreeableness") + ylim(0, 100)
+plot2 <- plot_model(model3b, type = "pred", terms = c("privacy", "conscientiousness[1,3,5,7]"), title = "", axis.title = c("Privacy Concerns", "Predicted Security Awareness Score"), legend.title = "Conscientiousness")+ ylim(0, 100)
+#plot1
+#plot2
+fig4 <- grid.arrange(plot1, plot2, ncol=2,top=textGrob("Marginal Effects on SSO Security Awareness Score"))
+ggsave("fig4.pdf", plot= fig4, dpi="print")
+```
